@@ -1,6 +1,10 @@
+#!/usr/bin/env python
 import pymongo
+import warnings
+warnings.filterwarnings("ignore")
 from datetime import datetime, timedelta, date
 import pandas as pd
+import sys
 
 host = "localhost"
 port = 27017
@@ -30,8 +34,35 @@ class Budget:
         elif freq == "week":
             q = self.get_week()
         df = self.cursor_to_df(q)
-        days = df.groupby(pd.Grouper(freq=group))
-        return days
+        breakdown = df.groupby(pd.Grouper(freq=group))
+        return breakdown
+
+
+    def budgettable(self):
+        month = self.breakdown("month", "d")
+        week = self.breakdown("month", "W")
+
+    def breakdown_detail(self, freq):
+        groups = self.breakdown(freq, "d")
+        cumulative = []
+        for day, df in groups:
+            print day
+            print ""
+            if len(df) > 0:
+                print df[["Merchant","ChargeValue"]].to_string(header=False,index=False)
+            else:
+                print "Didn't spend today!"
+            daytotal = df["ChargeValue"].sum()
+            print "---------------------------"
+            print "total spent: " + "$" + str(daytotal.round(2))
+            cumulative.append(daytotal)
+            print "cumulative total spent ({}): $".format(freq) + \
+                  str(sum(cumulative).round(2))
+            print ""
+            print ""
+            print ""
+        print "Total Expenses ({}): $".format(freq) + str(sum(groups.sum()["ChargeValue"]))
+
 
     def cursor_to_df(self, cursor):
         df = pd.DataFrame(list(cursor)).set_index("TransactionDate")
@@ -39,10 +70,10 @@ class Budget:
 
     def get_spend(self, starttime, endtime):
         bank_transactions = self.transactiondb
-        cum_weekly = bank_transactions.find(
+        expenses = bank_transactions.find(
             {"TransactionDate": {"$gte": starttime,
                                  "$lte": endtime}})
-        return cum_weekly
+        return expenses
 
     def get_week(self):
         start, end = self.cumulative_week()
@@ -76,3 +107,8 @@ class Budget:
         y = endtime.year
         starttime = datetime.combine(date(y, 1, 1), datetime.min.time())
         return starttime, endtime
+
+if __name__ == "__main__":
+    freq = sys.argv[1]
+    record = Budget(2669.41)
+    record.breakdown_detail(freq)
